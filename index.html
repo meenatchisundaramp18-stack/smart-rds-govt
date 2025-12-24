@@ -58,7 +58,9 @@
         <!-- Total stock per item -->
         <div class="section">
             <h2>🏛️ Total Stock for Shop <span id="shopTitle">TN001</span></h2>
-            <div class="card-grid" id="totalStockGrid"></div>
+            <div class="card-grid" id="totalStockGrid">
+                <!-- Filled by JS -->
+            </div>
             <button class="btn" onclick="saveTotalStock()">💾 Save Total Stock to Shop</button>
         </div>
         
@@ -70,7 +72,9 @@
                 <button class="tab-btn" onclick="switchTab('NPHH')">NPHH</button>
                 <button class="tab-btn" onclick="switchTab('PHH')">PHH</button>
             </div>
-            <div class="card-grid" id="allocationGrid"></div>
+            <div class="card-grid" id="allocationGrid">
+                <!-- Items populated by JS -->
+            </div>
             <button class="btn" onclick="saveAllocations()">💾 Save Allocations to Shops</button>
             <div id="statusMsg" class="status"></div>
         </div>
@@ -84,7 +88,7 @@
     </div>
 
     <script>
-        // Firebase config
+        // Firebase config (your values)
         const firebaseConfig = {
           apiKey: "AIzaSyCf5yQAkQGICClkV1p39p8dqNIiZQoKeKc",
           authDomain: "smart-rds.firebaseapp.com",
@@ -103,29 +107,12 @@
         let currentCardType = 'AAY';
         let currentShopId = 'TN001';
 
-        const UNIT_LABEL_TOTAL = {
-            rice: 'kg',
-            sugar: 'kg',
-            wheat: 'kg',
-            dhal: 'kg',
-            kerosene: 'litres'
-        };
-        const UNIT_LABEL_PER_CARD = {
-            rice: 'kg',
-            sugar: 'kg',
-            wheat: 'kg',
-            dhal: 'kg',
-            kerosene: 'litres'
-        };
-
         window.onload = function() {
             createTotalStockGrid();
             createAllocationGrid();
             loadAllForShop();
             setInterval(loadStockReport, 30000);
         };
-
-        /* ---------- SHOP SELECTOR ---------- */
 
         function applyShopId() {
             const id = document.getElementById('shopIdInput').value.trim();
@@ -150,12 +137,11 @@
             const grid = document.getElementById('totalStockGrid');
             grid.innerHTML = '';
             ITEMS.forEach(item => {
-                const unit = UNIT_LABEL_TOTAL[item];
                 const card = document.createElement('div');
                 card.className = 'item-card';
                 card.innerHTML = `
-                    <div class="item-name">${item.toUpperCase()} (Total ${unit})</div>
-                    <input type="number" id="total_${item}" min="0" step="0.1" placeholder="0.0 ${unit}">
+                    <div class="item-name">${item.toUpperCase()} (Total kg)</div>
+                    <input type="number" id="total_${item}" min="0" step="0.1" placeholder="0.0 kg">
                 `;
                 grid.appendChild(card);
             });
@@ -168,7 +154,7 @@
                     const data = snap.val();
                     ITEMS.forEach(item => {
                         const el = document.getElementById('total_' + item);
-                        if (el) el.value = (data[item] !== undefined) ? data[item] : '';
+                        if (el) el.value = data[item] || 0;
                     });
                 } else {
                     ITEMS.forEach(item => {
@@ -210,12 +196,11 @@
             const grid = document.getElementById('allocationGrid');
             grid.innerHTML = '';
             ITEMS.forEach(item => {
-                const unit = UNIT_LABEL_PER_CARD[item];
                 const card = document.createElement('div');
                 card.className = 'item-card';
                 card.innerHTML = `
-                    <div class="item-name">${item.toUpperCase()} (Per card ${unit})</div>
-                    <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="0.0 ${unit}">
+                    <div class="item-name">${item.toUpperCase()} (Per card kg)</div>
+                    <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="0.0 kg">
                 `;
                 grid.appendChild(card);
             });
@@ -223,20 +208,12 @@
 
         async function loadCurrentValues() {
             try {
-                const snapshot = await db
-                    .ref('shops/' + currentShopId + '/allocations/' + currentCardType)
-                    .once('value');
-
+                const snapshot = await db.ref('shops/' + currentShopId + '/allocations/' + currentCardType).once('value');
                 if (snapshot.exists()) {
                     const data = snapshot.val();
                     ITEMS.forEach(item => {
                         const el = document.getElementById(item + '_' + currentCardType);
-                        if (!el) return;
-                        if (data[item] !== undefined && data[item] !== null) {
-                            el.value = data[item];
-                        } else {
-                            el.value = '';
-                        }
+                        if (el) el.value = data[item] || 0;
                     });
                 } else {
                     ITEMS.forEach(item => {
@@ -244,33 +221,26 @@
                         if (el) el.value = '';
                     });
                 }
-            } catch (e) {
-                console.error(e);
-            }
+            } catch(e) { console.error(e); }
         }
 
         async function saveAllocations() {
             const allocations = {};
             ITEMS.forEach(item => {
                 const input = document.getElementById(item + '_' + currentCardType);
-                const v = parseFloat(input.value);
-                allocations[item] = isNaN(v) ? 0 : v;
+                allocations[item] = parseFloat(input.value) || 0;
             });
 
             try {
-                await db
-                    .ref('shops/' + currentShopId + '/allocations/' + currentCardType)
-                    .set(allocations);
-                showStatus('✅ Allocations saved for ' + currentCardType +
+                await db.ref('shops/' + currentShopId + '/allocations/' + currentCardType).set(allocations);
+                showStatus('✅ Allocations saved successfully for ' + currentCardType +
                            ' in shop ' + currentShopId, 'success');
                 loadStockReport();
-            } catch (e) {
+            } catch(e) {
                 console.error(e);
                 showStatus('❌ Error saving allocations', 'error');
             }
         }
-
-        /* ---------- STATUS + REPORT ---------- */
 
         function showStatus(msg, type) {
             const status = document.getElementById('statusMsg');
@@ -279,6 +249,8 @@
             status.style.display = 'block';
             setTimeout(() => status.style.display = 'none', 5000);
         }
+
+        /* ---------- WEEKLY REPORT VIEW ---------- */
 
         async function loadStockReport() {
             try {
@@ -297,7 +269,7 @@
                     <table>
                         <tr>
                           <th>Item</th>
-                          <th>Total Stock</th>
+                          <th>Total Stock (Govt → Shop)</th>
                           <th>Sold This Week</th>
                           <th>Remaining</th>
                           <th>AAY Per Card Limit</th>
@@ -305,7 +277,6 @@
                 `;
 
                 ITEMS.forEach(item => {
-                    const unit = (item === 'kerosene') ? 'litres' : 'kg';
                     const total = totals[item] || 0;
                     const sold  = stock[item]?.sold || 0;
                     const remaining = total - sold;
@@ -313,18 +284,16 @@
 
                     html += `<tr>
                         <td>${item.toUpperCase()}</td>
-                        <td>${total} ${unit}</td>
-                        <td>${sold} ${unit}</td>
-                        <td style="color:${remaining<0?'red':'green'}">${remaining} ${unit}</td>
-                        <td>${limitAAY} ${unit}</td>
+                        <td>${total} kg</td>
+                        <td>${sold} kg</td>
+                        <td style="color:${remaining<0?'red':'green'}">${remaining} kg</td>
+                        <td>${limitAAY} kg</td>
                     </tr>`;
                 });
 
                 html += '</table>';
                 table.innerHTML = html;
-            } catch (e) {
-                console.error(e);
-            }
+            } catch(e) { console.error(e); }
         }
     </script>
 </body>
