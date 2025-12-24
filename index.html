@@ -88,7 +88,7 @@
     </div>
 
 <script>
-    // Firebase config (your values)
+    // Firebase config (same as before)
     const firebaseConfig = {
       apiKey: "AIzaSyCf5yQAkQGICClkV1p39p8dqNIiZQoKeKc",
       authDomain: "smart-rds.firebaseapp.com",
@@ -103,9 +103,26 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
+    // NOTE: same items array, units handled in UI
     const ITEMS = ['rice', 'sugar', 'wheat', 'dhal', 'kerosene'];
     let currentCardType = 'AAY';
     let currentShopId = 'TN001';
+
+    const UNIT_LABEL_TOTAL = {
+        rice: 'kg',
+        sugar: 'kg',
+        wheat: 'kg',
+        dhal: 'kg',
+        kerosene: 'litres'
+    };
+
+    const UNIT_LABEL_PER_CARD = {
+        rice: 'kg',
+        sugar: 'kg',
+        wheat: 'kg',
+        dhal: 'kg',
+        kerosene: 'litres'
+    };
 
     window.onload = function() {
         createTotalStockGrid();
@@ -114,11 +131,7 @@
         setInterval(loadStockReport, 30000);
     };
 
-    function unitLabel(item, perCard) {
-        if (item === 'kerosene') return perCard ? 'Per card L' : 'Total L';
-        return perCard ? 'Per card kg' : 'Total kg';
-    }
-
+    /* ---------- SHOP SELECTOR (unchanged) ---------- */
     function applyShopId() {
         const id = document.getElementById('shopIdInput').value.trim();
         if (!id) return;
@@ -142,11 +155,12 @@
         const grid = document.getElementById('totalStockGrid');
         grid.innerHTML = '';
         ITEMS.forEach(item => {
+            const unit = UNIT_LABEL_TOTAL[item];
             const card = document.createElement('div');
             card.className = 'item-card';
             card.innerHTML = `
-                <div class="item-name">${item.toUpperCase()} (${unitLabel(item,false)})</div>
-                <input type="number" id="total_${item}" min="0" step="0.1" placeholder="">
+                <div class="item-name">${item.toUpperCase()} (Total ${unit})</div>
+                <input type="number" id="total_${item}" min="0" step="0.1" placeholder="0.0 ${unit}">
             `;
             grid.appendChild(card);
         });
@@ -155,15 +169,18 @@
     async function loadTotalStock() {
         try {
             const snap = await db.ref('shops/' + currentShopId + '/stockTotals').once('value');
-            ITEMS.forEach(item => {
-                const el = document.getElementById('total_' + item);
-                if (!el) return;
-                if (snap.exists() && snap.val()[item] !== undefined) {
-                    el.value = snap.val()[item];
-                } else {
-                    el.value = '';   // no default 0.1
-                }
-            });
+            if (snap.exists()) {
+                const data = snap.val();
+                ITEMS.forEach(item => {
+                    const el = document.getElementById('total_' + item);
+                    if (el) el.value = (data[item] !== undefined) ? data[item] : '';
+                });
+            } else {
+                ITEMS.forEach(item => {
+                    const el = document.getElementById('total_' + item);
+                    if (el) el.value = '';
+                });
+            }
         } catch (e) { console.error(e); }
     }
 
@@ -171,8 +188,7 @@
         const totals = {};
         ITEMS.forEach(item => {
             const input = document.getElementById('total_' + item);
-            const v = input.value.trim();
-            totals[item] = v === '' ? 0 : parseFloat(v);
+            totals[item] = parseFloat(input.value) || 0;
         });
 
         try {
@@ -199,11 +215,12 @@
         const grid = document.getElementById('allocationGrid');
         grid.innerHTML = '';
         ITEMS.forEach(item => {
+            const unit = UNIT_LABEL_PER_CARD[item];
             const card = document.createElement('div');
             card.className = 'item-card';
             card.innerHTML = `
-                <div class="item-name">${item.toUpperCase()} (${unitLabel(item,true)})</div>
-                <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="">
+                <div class="item-name">${item.toUpperCase()} (Per card ${unit})</div>
+                <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="0.0 ${unit}">
             `;
             grid.appendChild(card);
         });
@@ -212,15 +229,18 @@
     async function loadCurrentValues() {
         try {
             const snapshot = await db.ref('shops/' + currentShopId + '/allocations/' + currentCardType).once('value');
-            ITEMS.forEach(item => {
-                const el = document.getElementById(item + '_' + currentCardType);
-                if (!el) return;
-                if (snapshot.exists() && snapshot.val()[item] !== undefined) {
-                    el.value = snapshot.val()[item];
-                } else {
-                    el.value = '';   // empty when no data yet
-                }
-            });
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                ITEMS.forEach(item => {
+                    const el = document.getElementById(item + '_' + currentCardType);
+                    if (el) el.value = (data[item] !== undefined) ? data[item] : '';
+                });
+            } else {
+                ITEMS.forEach(item => {
+                    const el = document.getElementById(item + '_' + currentCardType);
+                    if (el) el.value = '';
+                });
+            }
         } catch(e) { console.error(e); }
     }
 
@@ -228,13 +248,12 @@
         const allocations = {};
         ITEMS.forEach(item => {
             const input = document.getElementById(item + '_' + currentCardType);
-            const v = input.value.trim();
-            allocations[item] = v === '' ? 0 : parseFloat(v);
+            allocations[item] = parseFloat(input.value) || 0;
         });
 
         try {
             await db.ref('shops/' + currentShopId + '/allocations/' + currentCardType).set(allocations);
-            showStatus('✅ Allocations saved for ' + currentCardType +
+            showStatus('✅ Allocations saved successfully for ' + currentCardType +
                        ' in shop ' + currentShopId, 'success');
             loadStockReport();
         } catch(e) {
@@ -270,7 +289,7 @@
                 <table>
                     <tr>
                       <th>Item</th>
-                      <th>Total Stock (Govt → Shop)</th>
+                      <th>Total Stock</th>
                       <th>Sold This Week</th>
                       <th>Remaining</th>
                       <th>AAY Per Card Limit</th>
@@ -278,7 +297,7 @@
             `;
 
             ITEMS.forEach(item => {
-                const unit = item === 'kerosene' ? 'L' : 'kg';
+                const unit = (item === 'kerosene') ? 'litres' : 'kg';
                 const total = totals[item] || 0;
                 const sold  = stock[item]?.sold || 0;
                 const remaining = total - sold;
@@ -298,5 +317,6 @@
         } catch(e) { console.error(e); }
     }
 </script>
+
 </body>
 </html>
