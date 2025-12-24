@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SMART-RDS Government Portal</title>
 
-    <!-- Firebase compat SDKs for browser -->
+    <!-- Firebase compat SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 
@@ -24,7 +24,7 @@
         input:focus{outline:none;border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,0.1)}
         .btn{width:100%;padding:15px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;transition:all 0.3s}
         .btn:hover{transform:translateY(-2px);box-shadow:0 10px 20px rgba(102,126,234,0.3)}
-        .btn:active{transform:translateY(0)}
+        .btn.small{width:auto;padding:10px 18px;margin-top:10px}
         .status{display:none;padding:15px;margin:20px 0;border-radius:10px;font-weight:bold;text-align:center}
         .status.success{background:#d4edda;color:#155724;border:1px solid #c3e6cb}
         .status.error{background:#f8d7da;color:#721c24;border:1px solid #f5c6cb}
@@ -40,10 +40,19 @@
 <body>
     <div class="container">
         <h1>🇮🇳 SMART-RDS Government Portal</h1>
+
+        <!-- Total stock per item -->
+        <div class="section">
+            <h2>🏛️ Total Stock for Shop TN001 (Monthly / Weekly from Government)</h2>
+            <div class="card-grid" id="totalStockGrid">
+                <!-- Filled by JS -->
+            </div>
+            <button class="btn" onclick="saveTotalStock()">💾 Save Total Stock to Shop</button>
+        </div>
         
         <!-- Allocation Section -->
         <div class="section">
-            <h2>📊 Set Item Allocations</h2>
+            <h2>📊 Set Item Allocations per Card Type</h2>
             <div class="card-tabs">
                 <button class="tab-btn active" onclick="switchTab('AAY')">AAY</button>
                 <button class="tab-btn" onclick="switchTab('NPHH')">NPHH</button>
@@ -60,15 +69,16 @@
         <div class="section">
             <h2>📈 Weekly Stock Report (TN001)</h2>
             <div id="stockTable"></div>
+            <button class="btn small" onclick="loadStockReport()">🔄 Refresh Report</button>
         </div>
     </div>
 
     <script>
-        // Firebase configuration (from your project)
+        // Firebase config (your values)
         const firebaseConfig = {
           apiKey: "AIzaSyCf5yQAkQGICClkV1p39p8dqNIiZQoKeKc",
           authDomain: "smart-rds.firebaseapp.com",
-          databaseURL: "https://smart-rds-default-rtdb.firebaseio.com/",
+          databaseURL: "https://smart-rds-default-rtdb.firebaseio.com",
           projectId: "smart-rds",
           storageBucket: "smart-rds.firebasestorage.app",
           messagingSenderId: "1059807897058",
@@ -76,20 +86,68 @@
           measurementId: "G-BFE86XW3DF"
         };
 
-        // Initialize Firebase (compat style)
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
         const ITEMS = ['rice', 'sugar', 'wheat', 'dhal', 'kerosene'];
         let currentCardType = 'AAY';
 
-        // Initialize
         window.onload = function() {
+            createTotalStockGrid();
+            loadTotalStock();
             createAllocationGrid();
             loadCurrentValues();
             loadStockReport();
-            setInterval(loadStockReport, 30000); // Update every 30s
+            setInterval(loadStockReport, 30000);
         };
+
+        /* ---------- TOTAL STOCK (GOVT → SHOP) ---------- */
+
+        function createTotalStockGrid() {
+            const grid = document.getElementById('totalStockGrid');
+            grid.innerHTML = '';
+            ITEMS.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'item-card';
+                card.innerHTML = `
+                    <div class="item-name">${item.toUpperCase()} (Total kg)</div>
+                    <input type="number" id="total_${item}" min="0" step="0.1" placeholder="0.0 kg">
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        async function loadTotalStock() {
+            try {
+                const snap = await db.ref('shops/TN001/stockTotals').once('value');
+                if (snap.exists()) {
+                    const data = snap.val();
+                    ITEMS.forEach(item => {
+                        const el = document.getElementById(`total_${item}`);
+                        if (el) el.value = data[item] || 0;
+                    });
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        async function saveTotalStock() {
+            const totals = {};
+            ITEMS.forEach(item => {
+                const input = document.getElementById(`total_${item}`);
+                totals[item] = parseFloat(input.value) || 0;
+            });
+
+            try {
+                await db.ref('shops/TN001/stockTotals').set(totals);
+                showStatus('✅ Total stock saved for shop TN001', 'success');
+                loadStockReport();
+            } catch (e) {
+                console.error(e);
+                showStatus('❌ Error saving total stock', 'error');
+            }
+        }
+
+        /* ---------- PER CARD TYPE ALLOCATION ---------- */
 
         function switchTab(type) {
             currentCardType = type;
@@ -106,7 +164,7 @@
                 const card = document.createElement('div');
                 card.className = 'item-card';
                 card.innerHTML = `
-                    <div class="item-name">${item.toUpperCase()}</div>
+                    <div class="item-name">${item.toUpperCase()} (Per card kg)</div>
                     <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="0.0 kg">
                 `;
                 grid.appendChild(card);
@@ -136,6 +194,7 @@
             try {
                 await db.ref(`shops/TN001/allocations/${currentCardType}`).set(allocations);
                 showStatus('✅ Allocations saved successfully for ' + currentCardType, 'success');
+                loadStockReport();
             } catch(e) {
                 console.error(e);
                 showStatus('❌ Error saving allocations', 'error');
@@ -150,37 +209,47 @@
             setTimeout(() => status.style.display = 'none', 5000);
         }
 
+        /* ---------- WEEKLY REPORT VIEW ---------- */
+
         async function loadStockReport() {
             try {
-                const [allocSnap, soldSnap] = await Promise.all([
-                    db.ref('shops/TN001/allocations').once('value'),
-                    db.ref('shops/TN001/stock').once('value')
+                const [totalSnap, soldSnap, allocSnap] = await Promise.all([
+                    db.ref('shops/TN001/stockTotals').once('value'),
+                    db.ref('shops/TN001/stock').once('value'),   // to be updated from hardware later
+                    db.ref('shops/TN001/allocations/AAY').once('value')
                 ]);
-                
+
+                const totals = totalSnap.exists() ? totalSnap.val() : {};
+                const stock  = soldSnap.exists()  ? soldSnap.val()  : {};
+                const allocAAY = allocSnap.exists() ? allocSnap.val() : {};
+
                 const table = document.getElementById('stockTable');
                 let html = `
                     <table>
-                        <tr><th>Item</th><th>Total Allocated (AAY)</th><th>Sold This Week</th><th>Remaining</th></tr>
+                        <tr>
+                          <th>Item</th>
+                          <th>Total Stock (Govt → Shop)</th>
+                          <th>Sold This Week</th>
+                          <th>Remaining</th>
+                          <th>AAY Per Card Limit</th>
+                        </tr>
                 `;
-                
-                if (soldSnap.exists()) {
-                    const stock = soldSnap.val();
-                    ITEMS.forEach(item => {
-                        const total = allocSnap.child('AAY').child(item).val() || 0;
-                        const sold = stock[item]?.sold || 0;
-                        const remaining = total - sold;
-                        html += `<tr>
-                            <td>${item.toUpperCase()}</td>
-                            <td>${total} kg</td>
-                            <td>${sold} kg</td>
-                            <td style="color:${remaining<0?'red':'green'}">${remaining} kg</td>
-                        </tr>`;
-                    });
-                } else {
-                    ITEMS.forEach(item => {
-                        html += `<tr><td>${item.toUpperCase()}</td><td>0 kg</td><td>0 kg</td><td>0 kg</td></tr>`;
-                    });
-                }
+
+                ITEMS.forEach(item => {
+                    const total = totals[item] || 0;
+                    const sold  = stock[item]?.sold || 0;
+                    const remaining = total - sold;
+                    const limitAAY = allocAAY[item] || 0;
+
+                    html += `<tr>
+                        <td>${item.toUpperCase()}</td>
+                        <td>${total} kg</td>
+                        <td>${sold} kg</td>
+                        <td style="color:${remaining<0?'red':'green'}">${remaining} kg</td>
+                        <td>${limitAAY} kg</td>
+                    </tr>`;
+                });
+
                 html += '</table>';
                 table.innerHTML = html;
             } catch(e) { console.error(e); }
