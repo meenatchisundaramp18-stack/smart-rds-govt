@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SMART-RDS Government Portal</title>
+
+    <!-- Firebase compat SDKs for browser -->
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+
     <style>
         *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,sans-serif}
         body{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:20px}
@@ -61,16 +64,19 @@
     </div>
 
     <script>
-        // Firebase Config (Replace with your project config)
+        // Firebase configuration (from your project)
         const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT.firebaseapp.com",
-            databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT.appspot.com",
-            messagingSenderId: "123456789",
-            appId: "YOUR_APP_ID"
+          apiKey: "AIzaSyCf5yQAkQGICClkV1p39p8dqNIiZQoKeKc",
+          authDomain: "smart-rds.firebaseapp.com",
+          databaseURL: "https://smart-rds-default-rtdb.firebaseio.com",
+          projectId: "smart-rds",
+          storageBucket: "smart-rds.firebasestorage.app",
+          messagingSenderId: "1059807897058",
+          appId: "1:1059807897058:web:46fa1720cb7ca87658c5bb",
+          measurementId: "G-BFE86XW3DF"
         };
+
+        // Initialize Firebase (compat style)
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
@@ -80,6 +86,7 @@
         // Initialize
         window.onload = function() {
             createAllocationGrid();
+            loadCurrentValues();
             loadStockReport();
             setInterval(loadStockReport, 30000); // Update every 30s
         };
@@ -89,6 +96,7 @@
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             event.target.classList.add('active');
             createAllocationGrid();
+            loadCurrentValues();
         }
 
         function createAllocationGrid() {
@@ -99,7 +107,7 @@
                 card.className = 'item-card';
                 card.innerHTML = `
                     <div class="item-name">${item.toUpperCase()}</div>
-                    <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="0.0 kg" onchange="loadCurrentValues()">
+                    <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="0.0 kg">
                 `;
                 grid.appendChild(card);
             });
@@ -111,7 +119,8 @@
                 if (snapshot.exists()) {
                     const data = snapshot.val();
                     ITEMS.forEach(item => {
-                        document.getElementById(`${item}_${currentCardType}`).value = data[item] || 0;
+                        const el = document.getElementById(`${item}_${currentCardType}`);
+                        if (el) el.value = data[item] || 0;
                     });
                 }
             } catch(e) { console.error(e); }
@@ -128,6 +137,7 @@
                 await db.ref(`shops/TN001/allocations/${currentCardType}`).set(allocations);
                 showStatus('✅ Allocations saved successfully for ' + currentCardType, 'success');
             } catch(e) {
+                console.error(e);
                 showStatus('❌ Error saving allocations', 'error');
             }
         }
@@ -150,7 +160,7 @@
                 const table = document.getElementById('stockTable');
                 let html = `
                     <table>
-                        <tr><th>Item</th><th>Total Allocated</th><th>Sold This Week</th><th>Remaining</th></tr>
+                        <tr><th>Item</th><th>Total Allocated (AAY)</th><th>Sold This Week</th><th>Remaining</th></tr>
                 `;
                 
                 if (soldSnap.exists()) {
@@ -159,11 +169,16 @@
                         const total = allocSnap.child('AAY').child(item).val() || 0;
                         const sold = stock[item]?.sold || 0;
                         const remaining = total - sold;
-                        html += `<tr><td>${item.toUpperCase()}</td><td>${total}kg</td><td>${sold}kg</td><td style="color:${remaining<0?'red':'green'}">${remaining}kg</td></tr>`;
+                        html += `<tr>
+                            <td>${item.toUpperCase()}</td>
+                            <td>${total} kg</td>
+                            <td>${sold} kg</td>
+                            <td style="color:${remaining<0?'red':'green'}">${remaining} kg</td>
+                        </tr>`;
                     });
                 } else {
                     ITEMS.forEach(item => {
-                        html += `<tr><td>${item.toUpperCase()}</td><td>0kg</td><td>0kg</td><td>0kg</td></tr>`;
+                        html += `<tr><td>${item.toUpperCase()}</td><td>0 kg</td><td>0 kg</td><td>0 kg</td></tr>`;
                     });
                 }
                 html += '</table>';
