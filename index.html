@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMART-RDS Government Portal</title>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui,sans-serif}
+        body{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;padding:20px}
+        .container{max-width:1200px;margin:0 auto;background:white;border-radius:20px;padding:30px;box-shadow:0 20px 40px rgba(0,0,0,0.1)}
+        h1{text-align:center;color:#1a1a1a;margin-bottom:30px;font-size:2.2em}
+        .section{margin-bottom:40px;padding:25px;border-radius:15px;background:#f8f9ff;box-shadow:0 5px 15px rgba(0,0,0,0.08)}
+        .section h2{margin-bottom:20px;color:#333;font-size:1.5em}
+        .card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-bottom:20px}
+        .item-card{background:#fff;border:2px solid #e1e5e9;border-radius:12px;padding:20px;text-align:center;transition:all 0.3s}
+        .item-card:hover{transform:translateY(-5px);box-shadow:0 15px 30px rgba(0,0,0,0.1)}
+        .item-name{font-weight:bold;font-size:1.1em;color:#2c3e50;margin-bottom:10px}
+        input[type=number]{width:100%;padding:12px;border:2px solid #ddd;border-radius:8px;font-size:16px;text-align:center}
+        input:focus{outline:none;border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,0.1)}
+        .btn{width:100%;padding:15px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;transition:all 0.3s}
+        .btn:hover{transform:translateY(-2px);box-shadow:0 10px 20px rgba(102,126,234,0.3)}
+        .btn:active{transform:translateY(0)}
+        .status{display:none;padding:15px;margin:20px 0;border-radius:10px;font-weight:bold;text-align:center}
+        .status.success{background:#d4edda;color:#155724;border:1px solid #c3e6cb}
+        .status.error{background:#f8d7da;color:#721c24;border:1px solid #f5c6cb}
+        table{width:100%;border-collapse:collapse;margin-top:20px}
+        th,td{padding:12px;text-align:left;border-bottom:1px solid #eee}
+        th{background:#667eea;color:white;font-weight:600}
+        .card-tabs{display:flex;gap:10px;margin-bottom:20px}
+        .tab-btn{padding:12px 24px;border:none;border-radius:25px;background:#e1e5e9;color:#666;cursor:pointer;transition:all 0.3s}
+        .tab-btn.active{background:#667eea;color:white}
+        @media(max-width:768px){.card-grid{grid-template-columns:1fr}}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🇮🇳 SMART-RDS Government Portal</h1>
+        
+        <!-- Allocation Section -->
+        <div class="section">
+            <h2>📊 Set Item Allocations</h2>
+            <div class="card-tabs">
+                <button class="tab-btn active" onclick="switchTab('AAY')">AAY</button>
+                <button class="tab-btn" onclick="switchTab('NPHH')">NPHH</button>
+                <button class="tab-btn" onclick="switchTab('PHH')">PHH</button>
+            </div>
+            <div class="card-grid" id="allocationGrid">
+                <!-- Items populated by JS -->
+            </div>
+            <button class="btn" onclick="saveAllocations()">💾 Save Allocations to Shops</button>
+            <div id="statusMsg" class="status"></div>
+        </div>
+
+        <!-- Weekly Stock Report -->
+        <div class="section">
+            <h2>📈 Weekly Stock Report (TN001)</h2>
+            <div id="stockTable"></div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Config (Replace with your project config)
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "YOUR_APP_ID"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        const ITEMS = ['rice', 'sugar', 'wheat', 'dhal', 'kerosene'];
+        let currentCardType = 'AAY';
+
+        // Initialize
+        window.onload = function() {
+            createAllocationGrid();
+            loadStockReport();
+            setInterval(loadStockReport, 30000); // Update every 30s
+        };
+
+        function switchTab(type) {
+            currentCardType = type;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            createAllocationGrid();
+        }
+
+        function createAllocationGrid() {
+            const grid = document.getElementById('allocationGrid');
+            grid.innerHTML = '';
+            ITEMS.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'item-card';
+                card.innerHTML = `
+                    <div class="item-name">${item.toUpperCase()}</div>
+                    <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="0.0 kg" onchange="loadCurrentValues()">
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        async function loadCurrentValues() {
+            try {
+                const snapshot = await db.ref(`shops/TN001/allocations/${currentCardType}`).once('value');
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    ITEMS.forEach(item => {
+                        document.getElementById(`${item}_${currentCardType}`).value = data[item] || 0;
+                    });
+                }
+            } catch(e) { console.error(e); }
+        }
+
+        async function saveAllocations() {
+            const allocations = {};
+            ITEMS.forEach(item => {
+                const input = document.getElementById(`${item}_${currentCardType}`);
+                allocations[item] = parseFloat(input.value) || 0;
+            });
+
+            try {
+                await db.ref(`shops/TN001/allocations/${currentCardType}`).set(allocations);
+                showStatus('✅ Allocations saved successfully for ' + currentCardType, 'success');
+            } catch(e) {
+                showStatus('❌ Error saving allocations', 'error');
+            }
+        }
+
+        function showStatus(msg, type) {
+            const status = document.getElementById('statusMsg');
+            status.textContent = msg;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+            setTimeout(() => status.style.display = 'none', 5000);
+        }
+
+        async function loadStockReport() {
+            try {
+                const [allocSnap, soldSnap] = await Promise.all([
+                    db.ref('shops/TN001/allocations').once('value'),
+                    db.ref('shops/TN001/stock').once('value')
+                ]);
+                
+                const table = document.getElementById('stockTable');
+                let html = `
+                    <table>
+                        <tr><th>Item</th><th>Total Allocated</th><th>Sold This Week</th><th>Remaining</th></tr>
+                `;
+                
+                if (soldSnap.exists()) {
+                    const stock = soldSnap.val();
+                    ITEMS.forEach(item => {
+                        const total = allocSnap.child('AAY').child(item).val() || 0;
+                        const sold = stock[item]?.sold || 0;
+                        const remaining = total - sold;
+                        html += `<tr><td>${item.toUpperCase()}</td><td>${total}kg</td><td>${sold}kg</td><td style="color:${remaining<0?'red':'green'}">${remaining}kg</td></tr>`;
+                    });
+                } else {
+                    ITEMS.forEach(item => {
+                        html += `<tr><td>${item.toUpperCase()}</td><td>0kg</td><td>0kg</td><td>0kg</td></tr>`;
+                    });
+                }
+                html += '</table>';
+                table.innerHTML = html;
+            } catch(e) { console.error(e); }
+        }
+    </script>
+</body>
+</html>
