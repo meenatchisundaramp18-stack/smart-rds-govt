@@ -41,9 +41,23 @@
     <div class="container">
         <h1>🇮🇳 SMART-RDS Government Portal</h1>
 
+        <!-- Shop selector -->
+        <div class="section">
+            <h2>🏬 Select Ration Shop</h2>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+                <label style="font-weight:bold">Shop ID:</label>
+                <input type="text" id="shopIdInput" value="TN001"
+                       style="padding:10px 12px;border:2px solid #ddd;border-radius:8px;font-size:16px;min-width:150px">
+                <button class="btn small" onclick="applyShopId()">✅ Apply</button>
+            </div>
+            <p id="shopInfo" style="margin-top:8px;color:#555;font-size:14px">
+                Current shop: <b>TN001</b>
+            </p>
+        </div>
+
         <!-- Total stock per item -->
         <div class="section">
-            <h2>🏛️ Total Stock for Shop TN001 (Monthly / Weekly from Government)</h2>
+            <h2>🏛️ Total Stock for Shop <span id="shopTitle">TN001</span></h2>
             <div class="card-grid" id="totalStockGrid">
                 <!-- Filled by JS -->
             </div>
@@ -67,7 +81,7 @@
 
         <!-- Weekly Stock Report -->
         <div class="section">
-            <h2>📈 Weekly Stock Report (TN001)</h2>
+            <h2>📈 Weekly Stock Report (<span id="shopTitleReport">TN001</span>)</h2>
             <div id="stockTable"></div>
             <button class="btn small" onclick="loadStockReport()">🔄 Refresh Report</button>
         </div>
@@ -91,15 +105,31 @@
 
         const ITEMS = ['rice', 'sugar', 'wheat', 'dhal', 'kerosene'];
         let currentCardType = 'AAY';
+        let currentShopId = 'TN001';
 
         window.onload = function() {
             createTotalStockGrid();
-            loadTotalStock();
             createAllocationGrid();
-            loadCurrentValues();
-            loadStockReport();
+            loadAllForShop();
             setInterval(loadStockReport, 30000);
         };
+
+        function applyShopId() {
+            const id = document.getElementById('shopIdInput').value.trim();
+            if (!id) return;
+            currentShopId = id;
+            document.getElementById('shopTitle').textContent = currentShopId;
+            document.getElementById('shopTitleReport').textContent = currentShopId;
+            document.getElementById('shopInfo').innerHTML =
+                'Current shop: <b>' + currentShopId + '</b>';
+            loadAllForShop();
+        }
+
+        function loadAllForShop() {
+            loadTotalStock();
+            loadCurrentValues();
+            loadStockReport();
+        }
 
         /* ---------- TOTAL STOCK (GOVT → SHOP) ---------- */
 
@@ -119,12 +149,17 @@
 
         async function loadTotalStock() {
             try {
-                const snap = await db.ref('shops/TN001/stockTotals').once('value');
+                const snap = await db.ref('shops/' + currentShopId + '/stockTotals').once('value');
                 if (snap.exists()) {
                     const data = snap.val();
                     ITEMS.forEach(item => {
-                        const el = document.getElementById(`total_${item}`);
+                        const el = document.getElementById('total_' + item);
                         if (el) el.value = data[item] || 0;
+                    });
+                } else {
+                    ITEMS.forEach(item => {
+                        const el = document.getElementById('total_' + item);
+                        if (el) el.value = '';
                     });
                 }
             } catch (e) { console.error(e); }
@@ -133,13 +168,13 @@
         async function saveTotalStock() {
             const totals = {};
             ITEMS.forEach(item => {
-                const input = document.getElementById(`total_${item}`);
+                const input = document.getElementById('total_' + item);
                 totals[item] = parseFloat(input.value) || 0;
             });
 
             try {
-                await db.ref('shops/TN001/stockTotals').set(totals);
-                showStatus('✅ Total stock saved for shop TN001', 'success');
+                await db.ref('shops/' + currentShopId + '/stockTotals').set(totals);
+                showStatus('✅ Total stock saved for shop ' + currentShopId, 'success');
                 loadStockReport();
             } catch (e) {
                 console.error(e);
@@ -173,12 +208,17 @@
 
         async function loadCurrentValues() {
             try {
-                const snapshot = await db.ref(`shops/TN001/allocations/${currentCardType}`).once('value');
+                const snapshot = await db.ref('shops/' + currentShopId + '/allocations/' + currentCardType).once('value');
                 if (snapshot.exists()) {
                     const data = snapshot.val();
                     ITEMS.forEach(item => {
-                        const el = document.getElementById(`${item}_${currentCardType}`);
+                        const el = document.getElementById(item + '_' + currentCardType);
                         if (el) el.value = data[item] || 0;
+                    });
+                } else {
+                    ITEMS.forEach(item => {
+                        const el = document.getElementById(item + '_' + currentCardType);
+                        if (el) el.value = '';
                     });
                 }
             } catch(e) { console.error(e); }
@@ -187,13 +227,14 @@
         async function saveAllocations() {
             const allocations = {};
             ITEMS.forEach(item => {
-                const input = document.getElementById(`${item}_${currentCardType}`);
+                const input = document.getElementById(item + '_' + currentCardType);
                 allocations[item] = parseFloat(input.value) || 0;
             });
 
             try {
-                await db.ref(`shops/TN001/allocations/${currentCardType}`).set(allocations);
-                showStatus('✅ Allocations saved successfully for ' + currentCardType, 'success');
+                await db.ref('shops/' + currentShopId + '/allocations/' + currentCardType).set(allocations);
+                showStatus('✅ Allocations saved successfully for ' + currentCardType +
+                           ' in shop ' + currentShopId, 'success');
                 loadStockReport();
             } catch(e) {
                 console.error(e);
@@ -204,7 +245,7 @@
         function showStatus(msg, type) {
             const status = document.getElementById('statusMsg');
             status.textContent = msg;
-            status.className = `status ${type}`;
+            status.className = 'status ' + type;
             status.style.display = 'block';
             setTimeout(() => status.style.display = 'none', 5000);
         }
@@ -214,9 +255,9 @@
         async function loadStockReport() {
             try {
                 const [totalSnap, soldSnap, allocSnap] = await Promise.all([
-                    db.ref('shops/TN001/stockTotals').once('value'),
-                    db.ref('shops/TN001/stock').once('value'),   // to be updated from hardware later
-                    db.ref('shops/TN001/allocations/AAY').once('value')
+                    db.ref('shops/' + currentShopId + '/stockTotals').once('value'),
+                    db.ref('shops/' + currentShopId + '/stock').once('value'),
+                    db.ref('shops/' + currentShopId + '/allocations/AAY').once('value')
                 ]);
 
                 const totals = totalSnap.exists() ? totalSnap.val() : {};
