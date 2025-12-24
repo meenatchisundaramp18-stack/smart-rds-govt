@@ -58,9 +58,7 @@
         <!-- Total stock per item -->
         <div class="section">
             <h2>🏛️ Total Stock for Shop <span id="shopTitle">TN001</span></h2>
-            <div class="card-grid" id="totalStockGrid">
-                <!-- Filled by JS -->
-            </div>
+            <div class="card-grid" id="totalStockGrid"></div>
             <button class="btn" onclick="saveTotalStock()">💾 Save Total Stock to Shop</button>
         </div>
         
@@ -72,9 +70,7 @@
                 <button class="tab-btn" onclick="switchTab('NPHH')">NPHH</button>
                 <button class="tab-btn" onclick="switchTab('PHH')">PHH</button>
             </div>
-            <div class="card-grid" id="allocationGrid">
-                <!-- Items populated by JS -->
-            </div>
+            <div class="card-grid" id="allocationGrid"></div>
             <button class="btn" onclick="saveAllocations()">💾 Save Allocations to Shops</button>
             <div id="statusMsg" class="status"></div>
         </div>
@@ -87,236 +83,249 @@
         </div>
     </div>
 
-<script>
-    // Firebase config (same as before)
-    const firebaseConfig = {
-      apiKey: "AIzaSyCf5yQAkQGICClkV1p39p8dqNIiZQoKeKc",
-      authDomain: "smart-rds.firebaseapp.com",
-      databaseURL: "https://smart-rds-default-rtdb.firebaseio.com",
-      projectId: "smart-rds",
-      storageBucket: "smart-rds.firebasestorage.app",
-      messagingSenderId: "1059807897058",
-      appId: "1:1059807897058:web:46fa1720cb7ca87658c5bb",
-      measurementId: "G-BFE86XW3DF"
-    };
+    <script>
+        // Firebase config
+        const firebaseConfig = {
+          apiKey: "AIzaSyCf5yQAkQGICClkV1p39p8dqNIiZQoKeKc",
+          authDomain: "smart-rds.firebaseapp.com",
+          databaseURL: "https://smart-rds-default-rtdb.firebaseio.com",
+          projectId: "smart-rds",
+          storageBucket: "smart-rds.firebasestorage.app",
+          messagingSenderId: "1059807897058",
+          appId: "1:1059807897058:web:46fa1720cb7ca87658c5bb",
+          measurementId: "G-BFE86XW3DF"
+        };
 
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-    // NOTE: same items array, units handled in UI
-    const ITEMS = ['rice', 'sugar', 'wheat', 'dhal', 'kerosene'];
-    let currentCardType = 'AAY';
-    let currentShopId = 'TN001';
+        const ITEMS = ['rice', 'sugar', 'wheat', 'dhal', 'kerosene'];
+        let currentCardType = 'AAY';
+        let currentShopId = 'TN001';
 
-    const UNIT_LABEL_TOTAL = {
-        rice: 'kg',
-        sugar: 'kg',
-        wheat: 'kg',
-        dhal: 'kg',
-        kerosene: 'litres'
-    };
+        const UNIT_LABEL_TOTAL = {
+            rice: 'kg',
+            sugar: 'kg',
+            wheat: 'kg',
+            dhal: 'kg',
+            kerosene: 'litres'
+        };
+        const UNIT_LABEL_PER_CARD = {
+            rice: 'kg',
+            sugar: 'kg',
+            wheat: 'kg',
+            dhal: 'kg',
+            kerosene: 'litres'
+        };
 
-    const UNIT_LABEL_PER_CARD = {
-        rice: 'kg',
-        sugar: 'kg',
-        wheat: 'kg',
-        dhal: 'kg',
-        kerosene: 'litres'
-    };
+        window.onload = function() {
+            createTotalStockGrid();
+            createAllocationGrid();
+            loadAllForShop();
+            setInterval(loadStockReport, 30000);
+        };
 
-    window.onload = function() {
-        createTotalStockGrid();
-        createAllocationGrid();
-        loadAllForShop();
-        setInterval(loadStockReport, 30000);
-    };
+        /* ---------- SHOP SELECTOR ---------- */
 
-    /* ---------- SHOP SELECTOR (unchanged) ---------- */
-    function applyShopId() {
-        const id = document.getElementById('shopIdInput').value.trim();
-        if (!id) return;
-        currentShopId = id;
-        document.getElementById('shopTitle').textContent = currentShopId;
-        document.getElementById('shopTitleReport').textContent = currentShopId;
-        document.getElementById('shopInfo').innerHTML =
-            'Current shop: <b>' + currentShopId + '</b>';
-        loadAllForShop();
-    }
-
-    function loadAllForShop() {
-        loadTotalStock();
-        loadCurrentValues();
-        loadStockReport();
-    }
-
-    /* ---------- TOTAL STOCK (GOVT → SHOP) ---------- */
-
-    function createTotalStockGrid() {
-        const grid = document.getElementById('totalStockGrid');
-        grid.innerHTML = '';
-        ITEMS.forEach(item => {
-            const unit = UNIT_LABEL_TOTAL[item];
-            const card = document.createElement('div');
-            card.className = 'item-card';
-            card.innerHTML = `
-                <div class="item-name">${item.toUpperCase()} (Total ${unit})</div>
-                <input type="number" id="total_${item}" min="0" step="0.1" placeholder="0.0 ${unit}">
-            `;
-            grid.appendChild(card);
-        });
-    }
-
-    async function loadTotalStock() {
-        try {
-            const snap = await db.ref('shops/' + currentShopId + '/stockTotals').once('value');
-            if (snap.exists()) {
-                const data = snap.val();
-                ITEMS.forEach(item => {
-                    const el = document.getElementById('total_' + item);
-                    if (el) el.value = (data[item] !== undefined) ? data[item] : '';
-                });
-            } else {
-                ITEMS.forEach(item => {
-                    const el = document.getElementById('total_' + item);
-                    if (el) el.value = '';
-                });
-            }
-        } catch (e) { console.error(e); }
-    }
-
-    async function saveTotalStock() {
-        const totals = {};
-        ITEMS.forEach(item => {
-            const input = document.getElementById('total_' + item);
-            totals[item] = parseFloat(input.value) || 0;
-        });
-
-        try {
-            await db.ref('shops/' + currentShopId + '/stockTotals').set(totals);
-            showStatus('✅ Total stock saved for shop ' + currentShopId, 'success');
-            loadStockReport();
-        } catch (e) {
-            console.error(e);
-            showStatus('❌ Error saving total stock', 'error');
+        function applyShopId() {
+            const id = document.getElementById('shopIdInput').value.trim();
+            if (!id) return;
+            currentShopId = id;
+            document.getElementById('shopTitle').textContent = currentShopId;
+            document.getElementById('shopTitleReport').textContent = currentShopId;
+            document.getElementById('shopInfo').innerHTML =
+                'Current shop: <b>' + currentShopId + '</b>';
+            loadAllForShop();
         }
-    }
 
-    /* ---------- PER CARD TYPE ALLOCATION ---------- */
-
-    function switchTab(type) {
-        currentCardType = type;
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        event.target.classList.add('active');
-        createAllocationGrid();
-        loadCurrentValues();
-    }
-
-    function createAllocationGrid() {
-        const grid = document.getElementById('allocationGrid');
-        grid.innerHTML = '';
-        ITEMS.forEach(item => {
-            const unit = UNIT_LABEL_PER_CARD[item];
-            const card = document.createElement('div');
-            card.className = 'item-card';
-            card.innerHTML = `
-                <div class="item-name">${item.toUpperCase()} (Per card ${unit})</div>
-                <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="0.0 ${unit}">
-            `;
-            grid.appendChild(card);
-        });
-    }
-
-    async function loadCurrentValues() {
-        try {
-            const snapshot = await db.ref('shops/' + currentShopId + '/allocations/' + currentCardType).once('value');
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-                ITEMS.forEach(item => {
-                    const el = document.getElementById(item + '_' + currentCardType);
-                    if (el) el.value = (data[item] !== undefined) ? data[item] : '';
-                });
-            } else {
-                ITEMS.forEach(item => {
-                    const el = document.getElementById(item + '_' + currentCardType);
-                    if (el) el.value = '';
-                });
-            }
-        } catch(e) { console.error(e); }
-    }
-
-    async function saveAllocations() {
-        const allocations = {};
-        ITEMS.forEach(item => {
-            const input = document.getElementById(item + '_' + currentCardType);
-            allocations[item] = parseFloat(input.value) || 0;
-        });
-
-        try {
-            await db.ref('shops/' + currentShopId + '/allocations/' + currentCardType).set(allocations);
-            showStatus('✅ Allocations saved successfully for ' + currentCardType +
-                       ' in shop ' + currentShopId, 'success');
+        function loadAllForShop() {
+            loadTotalStock();
+            loadCurrentValues();
             loadStockReport();
-        } catch(e) {
-            console.error(e);
-            showStatus('❌ Error saving allocations', 'error');
         }
-    }
 
-    function showStatus(msg, type) {
-        const status = document.getElementById('statusMsg');
-        status.textContent = msg;
-        status.className = 'status ' + type;
-        status.style.display = 'block';
-        setTimeout(() => status.style.display = 'none', 5000);
-    }
+        /* ---------- TOTAL STOCK (GOVT → SHOP) ---------- */
 
-    /* ---------- WEEKLY REPORT VIEW ---------- */
-
-    async function loadStockReport() {
-        try {
-            const [totalSnap, soldSnap, allocSnap] = await Promise.all([
-                db.ref('shops/' + currentShopId + '/stockTotals').once('value'),
-                db.ref('shops/' + currentShopId + '/stock').once('value'),
-                db.ref('shops/' + currentShopId + '/allocations/AAY').once('value')
-            ]);
-
-            const totals = totalSnap.exists() ? totalSnap.val() : {};
-            const stock  = soldSnap.exists()  ? soldSnap.val()  : {};
-            const allocAAY = allocSnap.exists() ? allocSnap.val() : {};
-
-            const table = document.getElementById('stockTable');
-            let html = `
-                <table>
-                    <tr>
-                      <th>Item</th>
-                      <th>Total Stock</th>
-                      <th>Sold This Week</th>
-                      <th>Remaining</th>
-                      <th>AAY Per Card Limit</th>
-                    </tr>
-            `;
-
+        function createTotalStockGrid() {
+            const grid = document.getElementById('totalStockGrid');
+            grid.innerHTML = '';
             ITEMS.forEach(item => {
-                const unit = (item === 'kerosene') ? 'litres' : 'kg';
-                const total = totals[item] || 0;
-                const sold  = stock[item]?.sold || 0;
-                const remaining = total - sold;
-                const limitAAY = allocAAY[item] || 0;
+                const unit = UNIT_LABEL_TOTAL[item];
+                const card = document.createElement('div');
+                card.className = 'item-card';
+                card.innerHTML = `
+                    <div class="item-name">${item.toUpperCase()} (Total ${unit})</div>
+                    <input type="number" id="total_${item}" min="0" step="0.1" placeholder="0.0 ${unit}">
+                `;
+                grid.appendChild(card);
+            });
+        }
 
-                html += `<tr>
-                    <td>${item.toUpperCase()}</td>
-                    <td>${total} ${unit}</td>
-                    <td>${sold} ${unit}</td>
-                    <td style="color:${remaining<0?'red':'green'}">${remaining} ${unit}</td>
-                    <td>${limitAAY} ${unit}</td>
-                </tr>`;
+        async function loadTotalStock() {
+            try {
+                const snap = await db.ref('shops/' + currentShopId + '/stockTotals').once('value');
+                if (snap.exists()) {
+                    const data = snap.val();
+                    ITEMS.forEach(item => {
+                        const el = document.getElementById('total_' + item);
+                        if (el) el.value = (data[item] !== undefined) ? data[item] : '';
+                    });
+                } else {
+                    ITEMS.forEach(item => {
+                        const el = document.getElementById('total_' + item);
+                        if (el) el.value = '';
+                    });
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        async function saveTotalStock() {
+            const totals = {};
+            ITEMS.forEach(item => {
+                const input = document.getElementById('total_' + item);
+                totals[item] = parseFloat(input.value) || 0;
             });
 
-            html += '</table>';
-            table.innerHTML = html;
-        } catch(e) { console.error(e); }
-    }
-</script>
+            try {
+                await db.ref('shops/' + currentShopId + '/stockTotals').set(totals);
+                showStatus('✅ Total stock saved for shop ' + currentShopId, 'success');
+                loadStockReport();
+            } catch (e) {
+                console.error(e);
+                showStatus('❌ Error saving total stock', 'error');
+            }
+        }
 
+        /* ---------- PER CARD TYPE ALLOCATION ---------- */
+
+        function switchTab(type) {
+            currentCardType = type;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            createAllocationGrid();
+            loadCurrentValues();
+        }
+
+        function createAllocationGrid() {
+            const grid = document.getElementById('allocationGrid');
+            grid.innerHTML = '';
+            ITEMS.forEach(item => {
+                const unit = UNIT_LABEL_PER_CARD[item];
+                const card = document.createElement('div');
+                card.className = 'item-card';
+                card.innerHTML = `
+                    <div class="item-name">${item.toUpperCase()} (Per card ${unit})</div>
+                    <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="0.0 ${unit}">
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        async function loadCurrentValues() {
+            try {
+                const snapshot = await db
+                    .ref('shops/' + currentShopId + '/allocations/' + currentCardType)
+                    .once('value');
+
+                if (snapshot.exists()) {
+                    const data = snapshot.val();
+                    ITEMS.forEach(item => {
+                        const el = document.getElementById(item + '_' + currentCardType);
+                        if (!el) return;
+                        if (data[item] !== undefined && data[item] !== null) {
+                            el.value = data[item];
+                        } else {
+                            el.value = '';
+                        }
+                    });
+                } else {
+                    ITEMS.forEach(item => {
+                        const el = document.getElementById(item + '_' + currentCardType);
+                        if (el) el.value = '';
+                    });
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function saveAllocations() {
+            const allocations = {};
+            ITEMS.forEach(item => {
+                const input = document.getElementById(item + '_' + currentCardType);
+                const v = parseFloat(input.value);
+                allocations[item] = isNaN(v) ? 0 : v;
+            });
+
+            try {
+                await db
+                    .ref('shops/' + currentShopId + '/allocations/' + currentCardType)
+                    .set(allocations);
+                showStatus('✅ Allocations saved for ' + currentCardType +
+                           ' in shop ' + currentShopId, 'success');
+                loadStockReport();
+            } catch (e) {
+                console.error(e);
+                showStatus('❌ Error saving allocations', 'error');
+            }
+        }
+
+        /* ---------- STATUS + REPORT ---------- */
+
+        function showStatus(msg, type) {
+            const status = document.getElementById('statusMsg');
+            status.textContent = msg;
+            status.className = 'status ' + type;
+            status.style.display = 'block';
+            setTimeout(() => status.style.display = 'none', 5000);
+        }
+
+        async function loadStockReport() {
+            try {
+                const [totalSnap, soldSnap, allocSnap] = await Promise.all([
+                    db.ref('shops/' + currentShopId + '/stockTotals').once('value'),
+                    db.ref('shops/' + currentShopId + '/stock').once('value'),
+                    db.ref('shops/' + currentShopId + '/allocations/AAY').once('value')
+                ]);
+
+                const totals = totalSnap.exists() ? totalSnap.val() : {};
+                const stock  = soldSnap.exists()  ? soldSnap.val()  : {};
+                const allocAAY = allocSnap.exists() ? allocSnap.val() : {};
+
+                const table = document.getElementById('stockTable');
+                let html = `
+                    <table>
+                        <tr>
+                          <th>Item</th>
+                          <th>Total Stock</th>
+                          <th>Sold This Week</th>
+                          <th>Remaining</th>
+                          <th>AAY Per Card Limit</th>
+                        </tr>
+                `;
+
+                ITEMS.forEach(item => {
+                    const unit = (item === 'kerosene') ? 'litres' : 'kg';
+                    const total = totals[item] || 0;
+                    const sold  = stock[item]?.sold || 0;
+                    const remaining = total - sold;
+                    const limitAAY = allocAAY[item] || 0;
+
+                    html += `<tr>
+                        <td>${item.toUpperCase()}</td>
+                        <td>${total} ${unit}</td>
+                        <td>${sold} ${unit}</td>
+                        <td style="color:${remaining<0?'red':'green'}">${remaining} ${unit}</td>
+                        <td>${limitAAY} ${unit}</td>
+                    </tr>`;
+                });
+
+                html += '</table>';
+                table.innerHTML = html;
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    </script>
 </body>
 </html>
