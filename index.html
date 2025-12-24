@@ -268,15 +268,19 @@
 
         async function loadStockReport() {
             try {
-                const [totalSnap, soldSnap, allocSnap] = await Promise.all([
+                const [totalSnap, soldSnap, aaySnap, nphhSnap, phhSnap] = await Promise.all([
                     db.ref('shops/' + currentShopId + '/stockTotals').once('value'),
                     db.ref('shops/' + currentShopId + '/stock').once('value'),
-                    db.ref('shops/' + currentShopId + '/allocations/AAY').once('value')
+                    db.ref('shops/' + currentShopId + '/allocations/AAY').once('value'),
+                    db.ref('shops/' + currentShopId + '/allocations/NPHH').once('value'),
+                    db.ref('shops/' + currentShopId + '/allocations/PHH').once('value')
                 ]);
 
-                const totals = totalSnap.exists() ? totalSnap.val() : {};
-                const stock  = soldSnap.exists()  ? soldSnap.val()  : {};
-                const allocAAY = allocSnap.exists() ? allocSnap.val() : {};
+                const totals   = totalSnap.exists() ? totalSnap.val() : {};
+                const stock    = soldSnap.exists()  ? soldSnap.val()  : {};
+                const allocAAY = aaySnap.exists()   ? aaySnap.val()   : {};
+                const allocNPHH= nphhSnap.exists()  ? nphhSnap.val()  : {};
+                const allocPHH = phhSnap.exists()   ? phhSnap.val()   : {};
 
                 const table = document.getElementById('stockTable');
                 let html = `
@@ -286,7 +290,9 @@
                           <th>Total Stock (Govt → Shop)</th>
                           <th>Sold This Week</th>
                           <th>Remaining</th>
-                          <th>AAY Per Card Limit</th>
+                          <th>AAY Limit</th>
+                          <th>NPHH Limit</th>
+                          <th>PHH Limit</th>
                         </tr>
                 `;
 
@@ -295,14 +301,18 @@
                     const total = totals[item] || 0;
                     const sold  = stock[item]?.sold || 0;
                     const remaining = total - sold;
-                    const limitAAY = allocAAY[item] || 0;
+                    const aay  = allocAAY[item] || 0;
+                    const nphh = allocNPHH[item] || 0;
+                    const phh  = allocPHH[item] || 0;
 
                     html += `<tr>
                         <td>${item.toUpperCase()}</td>
                         <td>${total} ${unit}</td>
                         <td>${sold} ${unit}</td>
                         <td style="color:${remaining<0?'red':'green'}">${remaining} ${unit}</td>
-                        <td>${limitAAY} ${unit}</td>
+                        <td>${aay} ${unit}</td>
+                        <td>${nphh} ${unit}</td>
+                        <td>${phh} ${unit}</td>
                     </tr>`;
                 });
 
