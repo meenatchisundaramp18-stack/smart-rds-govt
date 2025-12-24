@@ -107,6 +107,9 @@
         let currentCardType = 'AAY';
         let currentShopId = 'TN001';
 
+        const UNIT_TOTAL = { rice:'kg', sugar:'kg', wheat:'kg', dhal:'kg', kerosene:'litres' };
+        const UNIT_PER   = { rice:'kg', sugar:'kg', wheat:'kg', dhal:'kg', kerosene:'litres' };
+
         window.onload = function() {
             createTotalStockGrid();
             createAllocationGrid();
@@ -137,11 +140,12 @@
             const grid = document.getElementById('totalStockGrid');
             grid.innerHTML = '';
             ITEMS.forEach(item => {
+                const unit = UNIT_TOTAL[item];
                 const card = document.createElement('div');
                 card.className = 'item-card';
                 card.innerHTML = `
-                    <div class="item-name">${item.toUpperCase()} (Total kg)</div>
-                    <input type="number" id="total_${item}" min="0" step="0.1" placeholder="0.0 kg">
+                    <div class="item-name">${item.toUpperCase()} (Total ${unit})</div>
+                    <input type="number" id="total_${item}" min="0" step="0.1" placeholder="0.0 ${unit}">
                 `;
                 grid.appendChild(card);
             });
@@ -154,7 +158,7 @@
                     const data = snap.val();
                     ITEMS.forEach(item => {
                         const el = document.getElementById('total_' + item);
-                        if (el) el.value = data[item] || 0;
+                        if (el) el.value = (data[item] !== undefined) ? data[item] : '';
                     });
                 } else {
                     ITEMS.forEach(item => {
@@ -196,11 +200,12 @@
             const grid = document.getElementById('allocationGrid');
             grid.innerHTML = '';
             ITEMS.forEach(item => {
+                const unit = UNIT_PER[item];
                 const card = document.createElement('div');
                 card.className = 'item-card';
                 card.innerHTML = `
-                    <div class="item-name">${item.toUpperCase()} (Per card kg)</div>
-                    <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="0.0 kg">
+                    <div class="item-name">${item.toUpperCase()} (Per card ${unit})</div>
+                    <input type="number" id="${item}_${currentCardType}" min="0" step="0.1" placeholder="0.0 ${unit}">
                 `;
                 grid.appendChild(card);
             });
@@ -213,7 +218,12 @@
                     const data = snapshot.val();
                     ITEMS.forEach(item => {
                         const el = document.getElementById(item + '_' + currentCardType);
-                        if (el) el.value = data[item] || 0;
+                        if (!el) return;
+                        if (data[item] !== undefined && data[item] !== null) {
+                            el.value = data[item];
+                        } else {
+                            el.value = '';
+                        }
                     });
                 } else {
                     ITEMS.forEach(item => {
@@ -228,7 +238,8 @@
             const allocations = {};
             ITEMS.forEach(item => {
                 const input = document.getElementById(item + '_' + currentCardType);
-                allocations[item] = parseFloat(input.value) || 0;
+                const v = parseFloat(input.value);
+                allocations[item] = isNaN(v) ? 0 : v;
             });
 
             try {
@@ -277,6 +288,7 @@
                 `;
 
                 ITEMS.forEach(item => {
+                    const unit = (item === 'kerosene') ? 'litres' : 'kg';
                     const total = totals[item] || 0;
                     const sold  = stock[item]?.sold || 0;
                     const remaining = total - sold;
@@ -284,10 +296,10 @@
 
                     html += `<tr>
                         <td>${item.toUpperCase()}</td>
-                        <td>${total} kg</td>
-                        <td>${sold} kg</td>
-                        <td style="color:${remaining<0?'red':'green'}">${remaining} kg</td>
-                        <td>${limitAAY} kg</td>
+                        <td>${total} ${unit}</td>
+                        <td>${sold} ${unit}</td>
+                        <td style="color:${remaining<0?'red':'green'}">${remaining} ${unit}</td>
+                        <td>${limitAAY} ${unit}</td>
                     </tr>`;
                 });
 
