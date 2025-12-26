@@ -102,11 +102,8 @@ const db = firebase.database();
 const ITEMS = ['rice', 'sugar', 'wheat', 'dhal', 'kerosene'];
 let currentCardType = 'AAY';
 let currentShopId = 'TN001';
-
-// Store last report values locally to persist display
 let lastReportData = {};
 
-// Units
 const UNIT_TOTAL = { rice:'kg', sugar:'kg', wheat:'kg', dhal:'kg', kerosene:'litres' };
 const UNIT_PER   = { rice:'kg', sugar:'kg', wheat:'kg', dhal:'kg', kerosene:'litres' };
 
@@ -133,7 +130,7 @@ function loadAllForShop() {
     loadStockReport();
 }
 
-/* ---------- TOTAL STOCK (GOVT → SHOP) ---------- */
+/* ---------- TOTAL STOCK ---------- */
 function createTotalStockGrid() {
     const grid = document.getElementById('totalStockGrid');
     grid.innerHTML = '';
@@ -155,18 +152,10 @@ function createTotalStockGrid() {
 async function loadTotalStock() {
     try {
         const snap = await db.ref('shops/' + currentShopId + '/stockTotals').once('value');
-        if (snap.exists()) {
-            const data = snap.val();
-            ITEMS.forEach(item => {
-                const el = document.getElementById('total_' + item);
-                if (el) el.value = (data[item] !== undefined) ? data[item] : 0;
-            });
-        } else {
-            ITEMS.forEach(item => {
-                const el = document.getElementById('total_' + item);
-                if (el) el.value = 0;
-            });
-        }
+        ITEMS.forEach(item => {
+            const el = document.getElementById('total_' + item);
+            el.value = snap.exists() ? (snap.val()[item] || 0) : 0;
+        });
     } catch (e) { console.error(e); }
 }
 
@@ -179,15 +168,15 @@ async function saveTotalStock() {
 
     try {
         await db.ref('shops/' + currentShopId + '/stockTotals').set(totals);
-        showStatus('✅ Total stock saved for shop ' + currentShopId, 'success');
+        showStatus('✅ Total stock saved', 'success');
         loadStockReport();
-    } catch (e) {
+    } catch(e) {
         console.error(e);
         showStatus('❌ Error saving total stock', 'error');
     }
 }
 
-/* ---------- PER CARD TYPE ALLOCATION ---------- */
+/* ---------- ALLOCATIONS ---------- */
 function switchTab(type) {
     currentCardType = type;
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
@@ -217,19 +206,11 @@ function createAllocationGrid() {
 async function loadCurrentValues() {
     try {
         const snapshot = await db.ref('shops/' + currentShopId + '/allocations/' + currentCardType).once('value');
-        if (snapshot.exists()) {
-            const data = snapshot.val();
-            ITEMS.forEach(item => {
-                const el = document.getElementById(item + '_' + currentCardType);
-                if (el) el.value = (data[item] !== undefined) ? data[item] : 0;
-            });
-        } else {
-            ITEMS.forEach(item => {
-                const el = document.getElementById(item + '_' + currentCardType);
-                if (el) el.value = 0;
-            });
-        }
-    } catch(e) { console.error(e); }
+        ITEMS.forEach(item => {
+            const el = document.getElementById(item + '_' + currentCardType);
+            el.value = snapshot.exists() ? (snapshot.val()[item] || 0) : 0;
+        });
+    } catch(e){ console.error(e); }
 }
 
 async function saveAllocations() {
@@ -241,9 +222,15 @@ async function saveAllocations() {
 
     try {
         await db.ref('shops/' + currentShopId + '/allocations/' + currentCardType).set(allocations);
-        showStatus('✅ Allocations saved for ' + currentCardType + ' in shop ' + currentShopId, 'success');
-        // Save a copy for reporting
         lastReportData[currentCardType] = {...allocations};
+
+        // ✅ Reset input boxes to 0 after save
+        ITEMS.forEach(item => {
+            const el = document.getElementById(item + '_' + currentCardType);
+            el.value = 0;
+        });
+
+        showStatus('✅ Allocations saved', 'success');
         loadStockReport();
     } catch(e) {
         console.error(e);
@@ -257,22 +244,21 @@ function showStatus(msg, type) {
     status.textContent = msg;
     status.className = 'status ' + type;
     status.style.display = 'block';
-    setTimeout(() => status.style.display = 'none', 5000);
+    setTimeout(()=>status.style.display='none',5000);
 }
 
-/* ---------- WEEKLY REPORT VIEW ---------- */
+/* ---------- WEEKLY REPORT ---------- */
 async function loadStockReport() {
     try {
-        const [totalSnap, soldSnap] = await Promise.all([
+        const [totalSnap, soldSnap, allocSnap] = await Promise.all([
             db.ref('shops/' + currentShopId + '/stockTotals').once('value'),
-            db.ref('shops/' + currentShopId + '/stock').once('value')
+            db.ref('shops/' + currentShopId + '/stock').once('value'),
+            db.ref('shops/' + currentShopId + '/allocations').once('value')
         ]);
 
         const totals = totalSnap.exists() ? totalSnap.val() : {};
-        const stock  = soldSnap.exists()  ? soldSnap.val()  : {};
-
-        const snapshotAlloc = await db.ref('shops/' + currentShopId + '/allocations').once('value');
-        const allocations = snapshotAlloc.exists() ? snapshotAlloc.val() : {};
+        const sold   = soldSnap.exists() ? soldSnap.val() : {};
+        const alloc  = allocSnap.exists() ? allocSnap.val() : {};
 
         const table = document.getElementById('stockTable');
         let html = `<table>
@@ -289,17 +275,17 @@ async function loadStockReport() {
         ITEMS.forEach(item => {
             const unit = (item === 'kerosene') ? 'litres' : 'kg';
             const total = totals[item] || 0;
-            const sold  = stock[item]?.sold || 0;
-            const remaining = total - sold;
+            const soldQty = sold[item]?.sold || 0;
+            const remaining = total - soldQty;
 
-            const aay  = lastReportData['AAY']?.[item] ?? allocations?.AAY?.[item] ?? 0;
-            const nphh = lastReportData['NPHH']?.[item] ?? allocations?.NPHH?.[item] ?? 0;
-            const phh  = lastReportData['PHH']?.[item] ?? allocations?.PHH?.[item] ?? 0;
+            const aay  = lastReportData['AAY']?.[item] ?? alloc?.AAY?.[item] ?? 0;
+            const nphh = lastReportData['NPHH']?.[item] ?? alloc?.NPHH?.[item] ?? 0;
+            const phh  = lastReportData['PHH']?.[item] ?? alloc?.PHH?.[item] ?? 0;
 
             html += `<tr>
                 <td>${item.toUpperCase()}</td>
                 <td>${total} ${unit}</td>
-                <td>${sold} ${unit}</td>
+                <td>${soldQty} ${unit}</td>
                 <td style="color:${remaining<0?'red':'green'}">${remaining} ${unit}</td>
                 <td>${aay} ${unit}</td>
                 <td>${nphh} ${unit}</td>
@@ -310,7 +296,7 @@ async function loadStockReport() {
         html += '</table>';
         table.innerHTML = html;
 
-    } catch(e) { console.error(e); }
+    } catch(e){ console.error(e); }
 }
 </script>
 </body>
