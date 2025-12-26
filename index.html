@@ -102,7 +102,7 @@ const db = firebase.database();
 const ITEMS = ['rice', 'sugar', 'wheat', 'dhal', 'kerosene'];
 let currentCardType = 'AAY';
 let currentShopId = 'TN001';
-let lastReportData = {};
+let lastReportData = { totals: {}, allocations: {} };
 
 const UNIT_TOTAL = { rice:'kg', sugar:'kg', wheat:'kg', dhal:'kg', kerosene:'litres' };
 const UNIT_PER   = { rice:'kg', sugar:'kg', wheat:'kg', dhal:'kg', kerosene:'litres' };
@@ -168,9 +168,16 @@ async function saveTotalStock() {
 
     try {
         await db.ref('shops/' + currentShopId + '/stockTotals').set(totals);
+        lastReportData.totals = {...totals};
+
+        // ✅ Reset all total stock inputs to 0
+        ITEMS.forEach(item => {
+            document.getElementById('total_' + item).value = 0;
+        });
+
         showStatus('✅ Total stock saved', 'success');
         loadStockReport();
-    } catch(e) {
+    } catch(e){
         console.error(e);
         showStatus('❌ Error saving total stock', 'error');
     }
@@ -222,9 +229,9 @@ async function saveAllocations() {
 
     try {
         await db.ref('shops/' + currentShopId + '/allocations/' + currentCardType).set(allocations);
-        lastReportData[currentCardType] = {...allocations};
+        lastReportData.allocations[currentCardType] = {...allocations};
 
-        // ✅ Reset input boxes to 0 after save
+        // ✅ Reset all allocation inputs to 0
         ITEMS.forEach(item => {
             const el = document.getElementById(item + '_' + currentCardType);
             el.value = 0;
@@ -232,7 +239,7 @@ async function saveAllocations() {
 
         showStatus('✅ Allocations saved', 'success');
         loadStockReport();
-    } catch(e) {
+    } catch(e){
         console.error(e);
         showStatus('❌ Error saving allocations', 'error');
     }
@@ -256,9 +263,9 @@ async function loadStockReport() {
             db.ref('shops/' + currentShopId + '/allocations').once('value')
         ]);
 
-        const totals = totalSnap.exists() ? totalSnap.val() : {};
+        const totals = totalSnap.exists() ? totalSnap.val() : lastReportData.totals;
         const sold   = soldSnap.exists() ? soldSnap.val() : {};
-        const alloc  = allocSnap.exists() ? allocSnap.val() : {};
+        const alloc  = allocSnap.exists() ? allocSnap.val() : lastReportData.allocations;
 
         const table = document.getElementById('stockTable');
         let html = `<table>
@@ -278,9 +285,9 @@ async function loadStockReport() {
             const soldQty = sold[item]?.sold || 0;
             const remaining = total - soldQty;
 
-            const aay  = lastReportData['AAY']?.[item] ?? alloc?.AAY?.[item] ?? 0;
-            const nphh = lastReportData['NPHH']?.[item] ?? alloc?.NPHH?.[item] ?? 0;
-            const phh  = lastReportData['PHH']?.[item] ?? alloc?.PHH?.[item] ?? 0;
+            const aay  = alloc?.AAY?.[item] || 0;
+            const nphh = alloc?.NPHH?.[item] || 0;
+            const phh  = alloc?.PHH?.[item] || 0;
 
             html += `<tr>
                 <td>${item.toUpperCase()}</td>
